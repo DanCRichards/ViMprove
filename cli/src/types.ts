@@ -8,6 +8,8 @@ export interface LogEntry {
 export interface AnalyzeOptions {
   source?: string;
   since?: string;
+  afterTs?: number;   // unix timestamp lower bound (overrides since if set)
+  beforeTs?: number;  // unix timestamp upper bound
 }
 
 export interface SourceInfo {
@@ -25,10 +27,23 @@ export interface Stats {
   normalKeyCounts: Record<string, number>;
   runs: Record<string, number>;
   sequences: Record<string, number>;
+  // Existing detectors
   undoRedoOscillation: number;
   rapidSaves: number;
   textObjectOpportunities: number;
   repeatOpportunities: number;
+  // New detectors
+  starHashUsage: number;        // * and # presses (search word under cursor)
+  jumpListUsage: number;        // <C-o> and <C-i> presses
+  macroRecordCount: number;     // q presses in normal mode (macro record)
+  macroPlayCount: number;       // @ presses in normal mode (macro play)
+  indentRuns: number;           // runs of > or < (should use = operator)
+  endOfLineInsertPattern: number; // $a / $i / 0i / 0a sequences → A / I
+  substituteUsage: number;      // :s commands used
+  splitUsage: number;           // <C-w> presses (window splits)
+  percentUsage: number;         // % presses (bracket matching)
+  cgnOpportunities: number;     // n+c sequences (should use cgn + .)
+  ddMovePattern: number;        // dd + move + p (should use :m)
   firstSeen: Date;
   lastSeen: Date;
   activeSource: string;
