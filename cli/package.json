@@ -1,0 +1,14 @@
+{
+  "name": "vim-improver",
+  "version": "0.1.0",
+  "description": "Analyze your Vim keystrokes and get personalized improvement tips",
+  "main": "index.js",
+  "bin": {
+    "vim-improver": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": ["vim", "neovim", "productivity"],
+  "license": "MIT"
+}

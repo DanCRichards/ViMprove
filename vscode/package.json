@@ -1,0 +1,22 @@
+{
+  "name": "vim-improver",
+  "displayName": "Vim Improver",
+  "description": "Logs Vim usage patterns for analysis by the vim-improver CLI",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vim-improver.logKey",
+        "title": "Vim Improver: Log Key"
+      }
+    ]
+  },
+  "extensionDependencies": []
+}
