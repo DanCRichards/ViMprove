@@ -1,19 +1,15 @@
-'use strict';
-// Tips database.
-// Each tip has a detector (run against the analysed key sequence data)
-// and advice shown in the CLI output.
+import type { Tip } from './types.js';
 
-// severity: 1 (minor) → 3 (high impact)
+export const TIPS: Tip[] = [
 
-const TIPS = [
-  // ── Navigation ────────────────────────────────────────────────────────────
+  // ── Navigation ───────────────────────────────────────────────────────────────
 
   {
     id: 'repeated_j',
     category: 'Navigation',
     severity: 3,
     title: 'Holding j to move down many lines',
-    detect: (stats) => stats.runs['j'] || 0,
+    detect: stats => stats.runs['j'] ?? 0,
     threshold: 5,
     description:
       'Tapping j many times to reach a line wastes keystrokes. Vim has faster ' +
@@ -49,11 +45,10 @@ const TIPS = [
     category: 'Navigation',
     severity: 3,
     title: 'Holding k to move up many lines',
-    detect: (stats) => stats.runs['k'] || 0,
+    detect: stats => stats.runs['k'] ?? 0,
     threshold: 5,
     description:
-      'Same problem as j-spam, moving up. Every technique that applies to j has an ' +
-      'upward equivalent.',
+      'Same problem as j-spam, moving up. Every technique that applies to j has an upward equivalent.',
     before: 'kkkkkkk  (7 taps)',
     after: [
       '7k             — count + k',
@@ -73,7 +68,7 @@ const TIPS = [
     category: 'Navigation',
     severity: 2,
     title: 'Holding h to move left along a line',
-    detect: (stats) => stats.runs['h'] || 0,
+    detect: stats => stats.runs['h'] ?? 0,
     threshold: 4,
     description:
       'h is fine for 1–2 characters. Beyond that, use word-back motions or ' +
@@ -102,7 +97,7 @@ const TIPS = [
     category: 'Navigation',
     severity: 2,
     title: 'Holding l to move right along a line',
-    detect: (stats) => stats.runs['l'] || 0,
+    detect: stats => stats.runs['l'] ?? 0,
     threshold: 4,
     description:
       'l is fine for 1–2 characters. For anything further, character search or word ' +
@@ -135,10 +130,9 @@ const TIPS = [
     category: 'Navigation',
     severity: 3,
     title: 'Using arrow keys',
-    detect: (stats) => (stats.keyCounts['<Left>'] || 0) +
-                       (stats.keyCounts['<Right>'] || 0) +
-                       (stats.keyCounts['<Up>'] || 0) +
-                       (stats.keyCounts['<Down>'] || 0),
+    detect: stats =>
+      (stats.keyCounts['<Left>']  ?? 0) + (stats.keyCounts['<Right>'] ?? 0) +
+      (stats.keyCounts['<Up>']    ?? 0) + (stats.keyCounts['<Down>']  ?? 0),
     threshold: 10,
     description:
       'Arrow keys move your right hand off the home row on every press. ' +
@@ -162,14 +156,14 @@ const TIPS = [
     keys: ['h', 'j', 'k', 'l'],
   },
 
-  // ── Editing ───────────────────────────────────────────────────────────────
+  // ── Editing ──────────────────────────────────────────────────────────────────
 
   {
     id: 'repeated_x',
     category: 'Editing',
     severity: 3,
     title: 'Using x repeatedly to delete',
-    detect: (stats) => stats.runs['x'] || 0,
+    detect: stats => stats.runs['x'] ?? 0,
     threshold: 3,
     description:
       'Using x multiple times to delete characters is tedious. Use d with a ' +
@@ -192,10 +186,9 @@ const TIPS = [
     category: 'Editing',
     severity: 2,
     title: 'Using d$ instead of D',
-    detect: (stats) => stats.sequences['d$'] || 0,
+    detect: stats => stats.sequences['d$'] ?? 0,
     threshold: 3,
-    description:
-      'd$ deletes to end of line, which is exactly what the D shortcut does.',
+    description: 'd$ deletes to end of line, which is exactly what the D shortcut does.',
     before: 'd$',
     after: ['D   — equivalent to d$, one keystroke shorter'],
     keys: ['D'],
@@ -206,10 +199,9 @@ const TIPS = [
     category: 'Editing',
     severity: 2,
     title: 'Using c$ instead of C',
-    detect: (stats) => stats.sequences['c$'] || 0,
+    detect: stats => stats.sequences['c$'] ?? 0,
     threshold: 3,
-    description:
-      'c$ changes to end of line. C does the same in one keystroke.',
+    description: 'c$ changes to end of line. C does the same in one keystroke.',
     before: 'c$',
     after: ['C   — equivalent to c$'],
     keys: ['C'],
@@ -220,17 +212,16 @@ const TIPS = [
     category: 'Editing',
     severity: 2,
     title: 'Entering insert mode then immediately escaping',
-    detect: (stats) => stats.sequences['i<Esc>'] || 0,
+    detect: stats => stats.sequences['i<Esc>'] ?? 0,
     threshold: 3,
     description:
-      'Pressing i then immediately Esc (without inserting text) often means ' +
-      'you wanted to use a normal-mode operator like r (replace), or you ' +
-      'accidentally entered insert mode.',
+      'Pressing i then immediately Esc often means you wanted to use a normal-mode ' +
+      'operator like r (replace), or you accidentally entered insert mode.',
     before: 'i<Esc>  (enter and immediately leave insert mode)',
     after: [
       'r<char>     — replace the character under cursor',
       's           — delete char and enter insert mode (substitute)',
-      'If it was accidental, consider mapping jk or jj to <Esc>:',
+      "If accidental, map jk or jj to <Esc>:",
       "  inoremap jk <Esc>",
     ],
     keys: ['r', 's'],
@@ -241,7 +232,7 @@ const TIPS = [
     category: 'Editing',
     severity: 2,
     title: 'Many consecutive undos',
-    detect: (stats) => stats.runs['u'] || 0,
+    detect: stats => stats.runs['u'] ?? 0,
     threshold: 5,
     description:
       'Pressing u many times might mean you are making large mistakes or not ' +
@@ -253,7 +244,6 @@ const TIPS = [
       'Ctrl-r      — redo',
       ':earlier 5m — go back 5 minutes in time',
       ':later 5m   — go forward 5 minutes',
-      'Consider: undotree plugin for visual undo history',
     ],
     keys: ['5u', 'U', '<C-r>', ':earlier'],
   },
@@ -263,11 +253,11 @@ const TIPS = [
     category: 'Editing',
     severity: 2,
     title: 'Oscillating between undo and redo',
-    detect: (stats) => stats.undoRedoOscillation || 0,
+    detect: stats => stats.undoRedoOscillation,
     threshold: 3,
     description:
-      'Frequently alternating between u and Ctrl-r suggests you are not sure ' +
-      'about a change. Consider using marks to save position before a risky edit.',
+      'Frequently alternating between u and Ctrl-r suggests uncertainty about a change. ' +
+      'Use marks to save position before a risky edit.',
     before: 'u u u <C-r> u <C-r>  (back and forth)',
     after: [
       "ma          — set mark 'a' at current position",
@@ -277,17 +267,17 @@ const TIPS = [
     keys: ['m', '`', ':earlier', ':later'],
   },
 
-  // ── Workflow ──────────────────────────────────────────────────────────────
+  // ── Workflow ─────────────────────────────────────────────────────────────────
 
   {
     id: 'frequent_save',
     category: 'Workflow',
     severity: 1,
     title: 'Very frequent :w saves',
-    detect: (stats) => stats.rapidSaves || 0,
+    detect: stats => stats.rapidSaves,
     threshold: 5,
     description:
-      'Saving every few seconds is often a sign of anxiety about losing work. ' +
+      'Saving every few seconds often signals anxiety about losing work. ' +
       'Consider enabling auto-save instead.',
     before: ':w  :w  :w  (every few seconds)',
     after: [
@@ -304,7 +294,7 @@ const TIPS = [
     category: 'Workflow',
     severity: 1,
     title: 'Using :wq instead of ZZ',
-    detect: (stats) => stats.sequences[':wq'] || 0,
+    detect: stats => stats.sequences[':wq'] ?? 0,
     threshold: 5,
     description:
       ':wq saves and quits but requires switching to command mode. ZZ does the ' +
@@ -314,18 +304,18 @@ const TIPS = [
     keys: ['ZZ'],
   },
 
-  // ── Text Objects ──────────────────────────────────────────────────────────
+  // ── Text Objects ──────────────────────────────────────────────────────────────
 
   {
     id: 'missing_text_objects',
     category: 'Text Objects',
     severity: 3,
     title: 'Not using text objects',
-    detect: (stats) => stats.textObjectOpportunities || 0,
+    detect: stats => stats.textObjectOpportunities,
     threshold: 5,
     description:
-      'Text objects (iw, i", i(, etc.) let you operate on semantic units of code ' +
-      'without moving the cursor first. They are one of Vim\'s most powerful features.',
+      "Text objects (iw, i\", i(, etc.) let you operate on semantic units of code " +
+      "without moving the cursor first. They are one of Vim's most powerful features.",
     before: 'Moving to start of word, then d to end: ^dw',
     after: [
       'diw         — delete inner word (wherever cursor is)',
@@ -340,14 +330,14 @@ const TIPS = [
     keys: ['diw', 'daw', 'di"', 'ci{', 'dit'],
   },
 
-  // ── Repeat ────────────────────────────────────────────────────────────────
+  // ── Repeat ────────────────────────────────────────────────────────────────────
 
   {
     id: 'not_using_dot',
     category: 'Repeat',
     severity: 3,
     title: 'Repeating the same change manually',
-    detect: (stats) => stats.repeatOpportunities || 0,
+    detect: stats => stats.repeatOpportunities,
     threshold: 3,
     description:
       'The . command repeats your last change. If you find yourself making the ' +
@@ -361,5 +351,3 @@ const TIPS = [
     keys: ['.', 'cgn'],
   },
 ];
-
-module.exports = { TIPS };

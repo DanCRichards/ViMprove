@@ -1,12 +1,10 @@
-#!/usr/bin/env node
-'use strict';
-
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { analyze, listSources, LOG_DIR, VALID_SOURCES, parseSince } = require('./analyzer');
-const { TIPS } = require('./tips');
-const { parse: parseScriptout } = require('./scriptout');
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { analyze, listSources, LOG_DIR, VALID_SOURCES, parseSince } from './analyzer.js';
+import { TIPS } from './tips.js';
+import { parse as parseScriptout } from './scriptout.js';
+import type { Stats, ParsedArgs } from './types.js';
 
 // ── Colours ───────────────────────────────────────────────────────────────────
 
@@ -15,51 +13,50 @@ const c = isTTY
   ? {
       reset: '\x1b[0m',  bold: '\x1b[1m',    dim: '\x1b[2m',
       red: '\x1b[31m',   green: '\x1b[32m',  yellow: '\x1b[33m',
-      blue: '\x1b[34m',  magenta: '\x1b[35m', cyan: '\x1b[36m',
+      cyan: '\x1b[36m',
     }
   : Object.fromEntries(
-      ['reset','bold','dim','red','green','yellow','blue','magenta','cyan'].map((k) => [k, ''])
-    );
+      ['reset','bold','dim','red','green','yellow','cyan'].map(k => [k, ''])
+    ) as Record<string, string>;
 
 // ── Layout helpers ────────────────────────────────────────────────────────────
 
 const W = Math.min(process.stdout.columns || 80, 100);
 
 const hr  = (ch = '─') => ch.repeat(W);
-const num = (n) => Number(n).toLocaleString();
+const num = (n: number) => n.toLocaleString();
 
-function box(title, subtitle = '') {
-  const inner = subtitle ? `${title}  ${c.dim}${subtitle}${c.reset}${c.cyan}${c.bold}` : title;
-  // Measure printable width (strip ANSI for centering)
+function box(title: string, subtitle = ''): void {
   const bare = title + (subtitle ? `  ${subtitle}` : '');
+  const inner = subtitle ? `${title}  ${c.dim}${subtitle}${c.reset}${c.cyan}${c.bold}` : title;
   const pad = ' '.repeat(Math.max(0, Math.floor((W - bare.length - 4) / 2)));
   console.log(c.cyan + c.bold + hr('━') + c.reset);
   console.log(`${c.cyan}${c.bold}${pad}  ${inner}  ${c.reset}`);
   console.log(c.cyan + c.bold + hr('━') + c.reset);
 }
 
-function section(title) {
+function section(title: string): void {
   console.log(`\n${c.bold}${c.yellow}▸ ${title}${c.reset}`);
   console.log(c.dim + hr() + c.reset);
 }
 
-function kv(label, value, color = '') {
+function kv(label: string, value: string, color = ''): void {
   const l = `  ${label}`.padEnd(28);
   console.log(`${c.dim}${l}${c.reset}${color}${value}${color ? c.reset : ''}`);
 }
 
-function bar(value, max, width = 20) {
+function bar(value: number, max: number, width = 20): string {
   const filled = Math.round((value / Math.max(max, 1)) * width);
   return c.cyan + '█'.repeat(filled) + c.dim + '░'.repeat(width - filled) + c.reset;
 }
 
-function severityBadge(s) {
+function severityBadge(s: number): string {
   if (s >= 3) return `${c.red}${c.bold}HIGH${c.reset} `;
   if (s >= 2) return `${c.yellow}${c.bold}MED ${c.reset} `;
-  return          `${c.green}${c.bold}LOW ${c.reset} `;
+  return              `${c.green}${c.bold}LOW ${c.reset} `;
 }
 
-function relativeTime(unixSecs) {
+function relativeTime(unixSecs: number): string {
   const diff = Math.floor(Date.now() / 1000) - unixSecs;
   if (diff < 60)         return 'just now';
   if (diff < 3600)       return `${Math.floor(diff / 60)}m ago`;
@@ -69,17 +66,16 @@ function relativeTime(unixSecs) {
 }
 
 // ── Argument parsing ──────────────────────────────────────────────────────────
-// Supports:  vim-improver <command> [--source <src>] [--since <period>]
 
-function parseArgs(argv) {
+function parseArgs(argv: string[]): ParsedArgs {
   const flags = { source: 'all', since: 'all' };
-  const positional = [];
+  const positional: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--source' || argv[i] === '-s') {
-      flags.source = argv[++i] || 'all';
-    } else if (argv[i] === '--since') {
-      flags.since = argv[++i] || 'all';
+    if ((argv[i] === '--source' || argv[i] === '-s') && argv[i + 1]) {
+      flags.source = argv[++i];
+    } else if (argv[i] === '--since' && argv[i + 1]) {
+      flags.since = argv[++i];
     } else if (argv[i].startsWith('--source=')) {
       flags.source = argv[i].slice('--source='.length);
     } else if (argv[i].startsWith('--since=')) {
@@ -92,27 +88,27 @@ function parseArgs(argv) {
   return { flags, positional };
 }
 
-function filterLabel({ source, since }) {
-  const parts = [];
-  if (source && source !== 'all') parts.push(`source: ${source}`);
-  if (since  && since  !== 'all') parts.push(`last ${since}`);
+function filterLabel(flags: ParsedArgs['flags']): string {
+  const parts: string[] = [];
+  if (flags.source !== 'all') parts.push(`source: ${flags.source}`);
+  if (flags.since  !== 'all') parts.push(`last ${flags.since}`);
   return parts.length ? `[${parts.join(' · ')}]` : '';
 }
 
-function validateFlags({ source, since }) {
-  const errors = [];
-  if (source !== 'all' && !VALID_SOURCES.includes(source)) {
-    errors.push(`Unknown source "${source}". Valid values: ${VALID_SOURCES.join(', ')}, all`);
+function validateFlags(flags: ParsedArgs['flags']): string[] {
+  const errors: string[] = [];
+  if (flags.source !== 'all' && !VALID_SOURCES.includes(flags.source as typeof VALID_SOURCES[number])) {
+    errors.push(`Unknown source "${flags.source}". Valid values: ${VALID_SOURCES.join(', ')}, all`);
   }
-  if (since !== 'all' && !since.match(/^\d+(h|d)$/)) {
-    errors.push(`Unknown --since value "${since}". Examples: 1h, 24h, 7d, 30d`);
+  if (flags.since !== 'all' && !/^\d+(h|d)$/.test(flags.since)) {
+    errors.push(`Unknown --since value "${flags.since}". Examples: 1h, 24h, 7d, 30d`);
   }
   return errors;
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 
-function cmdHelp() {
+function cmdHelp(): void {
   box('Vim Improver');
   console.log(`
   Captures your Vim keystrokes and shows you where you can improve.
@@ -132,9 +128,9 @@ function cmdHelp() {
                        ${c.dim}1h · 24h · 7d · 30d · all (default)${c.reset}
 
   ${c.bold}Examples:${c.reset}
-    vim-improver report --source nvim
-    vim-improver tips   --source vscode --since 7d
-    vim-improver stats  --since 24h
+    vimprove report --source nvim
+    vimprove tips   --source vscode --since 7d
+    vimprove stats  --since 24h
 
   ${c.bold}Log directory:${c.reset} ${c.dim}${LOG_DIR}${c.reset}
 
@@ -143,15 +139,12 @@ function cmdHelp() {
 
   ${c.bold}Manual logging with Vim's ${c.cyan}-w${c.reset}${c.bold} flag:${c.reset}
     nvim -w ~/.vim-improver/session.sout  myfile.txt
-    vim-improver import ~/.vim-improver/session.sout
+    vimprove import ~/.vim-improver/session.sout
 `);
 }
 
-// ── sources ───────────────────────────────────────────────────────────────────
-
-function cmdSources() {
+function cmdSources(): void {
   box('Vim Improver — Sources');
-
   const data = listSources();
   const total = Object.values(data).reduce((s, v) => s + v.count, 0);
 
@@ -161,22 +154,23 @@ function cmdSources() {
     return;
   }
 
-  const SOURCE_LABELS = {
+  const SOURCE_LABELS: Record<string, string> = {
     nvim:      'NeoVim plugin',
     vscode:    'VSCode extension',
     scriptout: 'Vim -w scriptout',
   };
 
   section('Available sources');
-
-  const maxCount = Math.max(...Object.values(data).map((v) => v.count), 1);
+  const maxCount = Math.max(...Object.values(data).map(v => v.count), 1);
 
   for (const src of VALID_SOURCES) {
     const { count, lastSeen } = data[src];
     const hasData = count > 0;
     const pct = total > 0 ? ((count / total) * 100).toFixed(1) : '0.0';
     const barStr = hasData ? bar(count, maxCount) : c.dim + '░'.repeat(20) + c.reset;
-    const lastStr = hasData ? c.dim + relativeTime(lastSeen) + c.reset : c.dim + 'no data' + c.reset;
+    const lastStr = hasData && lastSeen
+      ? c.dim + relativeTime(lastSeen) + c.reset
+      : c.dim + 'no data' + c.reset;
     const countStr = hasData
       ? `${c.bold}${num(count)}${c.reset} keystrokes ${c.dim}(${pct}%)${c.reset}`
       : c.dim + '—' + c.reset;
@@ -191,19 +185,17 @@ function cmdSources() {
   console.log(c.dim + '  ' + hr() + c.reset);
   console.log(`\n  ${c.dim}Total: ${num(total)} keystrokes across all sources${c.reset}`);
 
-  const activeSrcs = VALID_SOURCES.filter((s) => data[s].count > 0);
+  const activeSrcs = VALID_SOURCES.filter(s => data[s].count > 0);
   if (activeSrcs.length > 1) {
     console.log(`\n  ${c.bold}Filter to a single source:${c.reset}`);
     for (const src of activeSrcs) {
-      console.log(`    vim-improver report ${c.cyan}--source ${src}${c.reset}`);
+      console.log(`    vimprove report ${c.cyan}--source ${src}${c.reset}`);
     }
   }
   console.log();
 }
 
-// ── stats ─────────────────────────────────────────────────────────────────────
-
-function cmdStats(stats, flags) {
+function cmdStats(stats: Stats, flags: ParsedArgs['flags']): void {
   box('Vim Improver — Stats', filterLabel(flags));
 
   section('Overview');
@@ -216,16 +208,14 @@ function cmdStats(stats, flags) {
   const sources = Object.entries(stats.sourceBreakdown).sort((a, b) => b[1] - a[1]);
   const srcMax = Math.max(...sources.map(([, v]) => v));
   for (const [src, count] of sources) {
-    const pct = ((count / stats.totalKeystrokes) * 100).toFixed(1);
-    kv(src, `${bar(count, srcMax)}  ${num(count)} (${pct}%)`);
+    kv(src, `${bar(count, srcMax)}  ${num(count)} (${((count / stats.totalKeystrokes) * 100).toFixed(1)}%)`);
   }
 
   section('Mode breakdown');
   const modes = Object.entries(stats.modeBreakdown).sort((a, b) => b[1] - a[1]);
   const modeMax = Math.max(...modes.map(([, v]) => v));
   for (const [mode, count] of modes) {
-    const pct = ((count / stats.totalKeystrokes) * 100).toFixed(1);
-    kv(mode, `${bar(count, modeMax)}  ${num(count)} (${pct}%)`);
+    kv(mode, `${bar(count, modeMax)}  ${num(count)} (${((count / stats.totalKeystrokes) * 100).toFixed(1)}%)`);
   }
 
   section('Top 15 normal-mode keys');
@@ -233,21 +223,18 @@ function cmdStats(stats, flags) {
     .filter(([k]) => k !== '<session-start>')
     .sort((a, b) => b[1] - a[1])
     .slice(0, 15);
-  const keyMax = topKeys[0]?.[1] || 1;
+  const keyMax = topKeys[0]?.[1] ?? 1;
   for (const [key, count] of topKeys) {
-    const pct = ((count / stats.totalKeystrokes) * 100).toFixed(1);
-    kv(key, `${bar(count, keyMax)}  ${num(count)} (${pct}%)`);
+    kv(key, `${bar(count, keyMax)}  ${num(count)} (${((count / stats.totalKeystrokes) * 100).toFixed(1)}%)`);
   }
   console.log();
 }
 
-// ── tips ──────────────────────────────────────────────────────────────────────
-
-function cmdTips(stats, flags) {
+function cmdTips(stats: Stats, flags: ParsedArgs['flags']): void {
   box('Vim Improver — Tips', filterLabel(flags));
 
   const triggered = TIPS
-    .map((tip) => ({ tip, score: tip.detect(stats) }))
+    .map(tip => ({ tip, score: tip.detect(stats) }))
     .filter(({ tip, score }) => score >= tip.threshold)
     .sort((a, b) => b.tip.severity - a.tip.severity || b.score - a.score);
 
@@ -255,7 +242,7 @@ function cmdTips(stats, flags) {
     console.log(`\n  ${c.green}${c.bold}No inefficiencies detected!${c.reset}`);
     console.log(`  ${c.dim}Either your Vim-fu is strong, or there isn't enough data yet.${c.reset}`);
     if (flags.source !== 'all' || flags.since !== 'all') {
-      console.log(`\n  ${c.dim}Try widening the filter:  vim-improver tips${c.reset}`);
+      console.log(`\n  ${c.dim}Try widening the filter:  vimprove tips${c.reset}`);
     }
     console.log();
     return;
@@ -278,10 +265,9 @@ function cmdTips(stats, flags) {
     console.log(`     ${c.red}Instead of:${c.reset}  ${c.dim}${tip.before}${c.reset}`);
     console.log(`     ${c.green}Try:${c.reset}`);
 
-    for (const line of (Array.isArray(tip.after) ? tip.after : [tip.after])) {
-      // Lines starting with a space are sub-lines (code examples inside a tip)
-      const indent = line.startsWith(' ') ? '       ' : '       ';
-      console.log(`${indent}${c.green}${line}${c.reset}`);
+    const afters = Array.isArray(tip.after) ? tip.after : [tip.after];
+    for (const line of afters) {
+      console.log(`       ${c.green}${line}${c.reset}`);
     }
 
     if (tip.keys?.length) {
@@ -295,18 +281,14 @@ function cmdTips(stats, flags) {
   }
 }
 
-// ── report ────────────────────────────────────────────────────────────────────
-
-function cmdReport(stats, flags) {
+function cmdReport(stats: Stats, flags: ParsedArgs['flags']): void {
   cmdStats(stats, flags);
   cmdTips(stats, flags);
 }
 
-// ── import ────────────────────────────────────────────────────────────────────
-
-function cmdImport(filePath) {
+function cmdImport(filePath: string | undefined): void {
   if (!filePath) {
-    console.log(`${c.red}Usage: vim-improver import <path-to-scriptout-file>${c.reset}`);
+    console.log(`${c.red}Usage: vimprove import <path-to-scriptout-file>${c.reset}`);
     console.log(`\nRecord a session with:  nvim -w ~/session.sout myfile.txt`);
     return;
   }
@@ -317,11 +299,11 @@ function cmdImport(filePath) {
     return;
   }
 
-  let result;
+  let result: ReturnType<typeof parseScriptout>;
   try {
     result = parseScriptout(resolved);
   } catch (e) {
-    console.log(`${c.red}Failed to parse: ${e.message}${c.reset}`);
+    console.log(`${c.red}Failed to parse: ${(e as Error).message}${c.reset}`);
     return;
   }
 
@@ -333,85 +315,56 @@ function cmdImport(filePath) {
 
   fs.mkdirSync(LOG_DIR, { recursive: true });
   const outFile = path.join(LOG_DIR, 'imported.log');
-  fs.appendFileSync(outFile, entries.map((e) => JSON.stringify(e)).join('\n') + '\n');
+  fs.appendFileSync(outFile, entries.map(e => JSON.stringify(e)).join('\n') + '\n');
 
   console.log(`\n${c.green}${c.bold}Imported ${entries.length} entries${c.reset} from ${c.cyan}${path.basename(resolved)}${c.reset}`);
   console.log(`  Raw keystrokes  ${c.bold}${num(keyCount)}${c.reset}`);
   console.log(`  Logged entries  ${c.bold}${num(entries.length)}${c.reset}  ${c.dim}(insert-mode text excluded)${c.reset}`);
   console.log(`  Written to      ${c.dim}${outFile}${c.reset}`);
-  console.log(`\nRun ${c.cyan}vim-improver report --source scriptout${c.reset} to see the analysis.\n`);
+  console.log(`\nRun ${c.cyan}vimprove report --source scriptout${c.reset} to see the analysis.\n`);
 }
 
-// ── clear ─────────────────────────────────────────────────────────────────────
+function cmdClear(flags: ParsedArgs['flags']): void {
+  if (!fs.existsSync(LOG_DIR)) { console.log('No log data to clear.'); return; }
 
-function cmdClear(flags) {
-  if (!fs.existsSync(LOG_DIR)) {
-    console.log('No log data to clear.');
-    return;
-  }
-
-  // With --source, only clear that source's logs
-  if (flags.source && flags.source !== 'all') {
+  if (flags.source !== 'all') {
     const logFile = path.join(LOG_DIR, `${flags.source}.log`);
-    if (!fs.existsSync(logFile)) {
-      console.log(`No log file found for source "${flags.source}".`);
-      return;
-    }
+    if (!fs.existsSync(logFile)) { console.log(`No log file found for source "${flags.source}".`); return; }
     fs.unlinkSync(logFile);
     console.log(`${c.green}Cleared ${logFile}${c.reset}`);
     return;
   }
 
-  const files = fs.readdirSync(LOG_DIR).filter((f) => f.endsWith('.log') || f.endsWith('.sout'));
-  if (files.length === 0) {
-    console.log('No log files found.');
-    return;
-  }
+  const files = fs.readdirSync(LOG_DIR).filter(f => f.endsWith('.log') || f.endsWith('.sout'));
+  if (files.length === 0) { console.log('No log files found.'); return; }
   for (const file of files) fs.unlinkSync(path.join(LOG_DIR, file));
   console.log(`${c.green}Cleared ${files.length} file(s) from ${LOG_DIR}${c.reset}`);
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-function main() {
+function main(): void {
   const { flags, positional } = parseArgs(process.argv.slice(2));
-  const command = positional[0] || 'report';
+  const command = positional[0] ?? 'report';
 
-  if (command === 'help' || command === '--help' || command === '-h') {
-    cmdHelp();
-    return;
-  }
+  if (command === 'help' || command === '--help' || command === '-h') { cmdHelp(); return; }
+  if (command === 'sources') { cmdSources(); return; }
+  if (command === 'import')  { cmdImport(positional[1]); return; }
+  if (command === 'clear')   { cmdClear(flags); return; }
 
-  if (command === 'sources') {
-    cmdSources();
-    return;
-  }
-
-  if (command === 'import') {
-    cmdImport(positional[1]);
-    return;
-  }
-
-  if (command === 'clear') {
-    cmdClear(flags);
-    return;
-  }
-
-  // Validate flags before hitting the analyzer
   const errors = validateFlags(flags);
   if (errors.length) {
     for (const e of errors) console.log(`${c.red}Error: ${e}${c.reset}`);
-    console.log(`\nRun ${c.cyan}vim-improver help${c.reset} for usage.\n`);
+    console.log(`\nRun ${c.cyan}vimprove help${c.reset} for usage.\n`);
     process.exit(1);
   }
 
   const stats = analyze(flags);
-
   if (!stats) {
     const label = filterLabel(flags);
     console.log(`\n${c.yellow}No data found${label ? ` for ${label}` : ''}.${c.reset}`);
     if (flags.source !== 'all' || flags.since !== 'all') {
-      console.log(`${c.dim}Try:  vim-improver sources  — to see what's available${c.reset}`);
+      console.log(`${c.dim}Try:  vimprove sources  — to see what's available${c.reset}`);
     } else {
       console.log(`Run ${c.cyan}./install.sh${c.reset} to set up logging, then use Vim for a while.`);
     }

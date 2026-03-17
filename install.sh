@@ -38,7 +38,10 @@ if ! command -v node &>/dev/null; then
   exit 1
 fi
 
-chmod +x "$SCRIPT_DIR/cli/index.js"
+# Build the CLI from TypeScript
+info "Building CLI..."
+(cd "$SCRIPT_DIR/cli" && npm install --silent && npm run build --silent)
+ok "Built cli/dist/vimprove.js"
 
 # Try to symlink into a directory on PATH
 INSTALL_BIN=""
@@ -50,16 +53,15 @@ for candidate in "$HOME/.local/bin" "$HOME/bin" "/usr/local/bin"; do
 done
 
 if [[ -z "$INSTALL_BIN" ]]; then
-  # Try to create ~/.local/bin
   mkdir -p "$HOME/.local/bin"
   INSTALL_BIN="$HOME/.local/bin"
   warn "Created $HOME/.local/bin — make sure it is on your PATH:"
   warn "  Add to your shell rc:  export PATH=\"\$HOME/.local/bin:\$PATH\""
 fi
 
-ln -sf "$SCRIPT_DIR/cli/index.js" "$INSTALL_BIN/vim-improver"
-ok "Installed vim-improver → $INSTALL_BIN/vim-improver"
-ok "Run: vim-improver help"
+ln -sf "$SCRIPT_DIR/cli/dist/vimprove.js" "$INSTALL_BIN/vimprove"
+ok "Installed vimprove → $INSTALL_BIN/vimprove"
+ok "Run: vimprove help"
 
 # ── 3. NeoVim plugin ──────────────────────────────────────────────────────────
 

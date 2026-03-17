@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies and build
+        run: |
+          cd cli
+          npm ci
+          npm run build
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: cli/dist/vimprove.js
+          generate_release_notes: true
+
+      - name: Print SHA256 for Homebrew formula
+        run: |
+          TAG=${GITHUB_REF_NAME}
+          URL="https://github.com/${{ github.repository }}/archive/refs/tags/${TAG}.tar.gz"
+          echo ""
+          echo "Update Formula/vimprove.rb with:"
+          echo "  url \"${URL}\""
+          SHA=$(curl -sL "${URL}" | sha256sum | awk '{print $1}')
+          echo "  sha256 \"${SHA}\""

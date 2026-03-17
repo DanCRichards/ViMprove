@@ -1,14 +1,20 @@
 {
-  "name": "vim-improver",
+  "name": "vimprove",
   "version": "0.1.0",
   "description": "Analyze your Vim keystrokes and get personalized improvement tips",
-  "main": "index.js",
+  "type": "module",
   "bin": {
-    "vim-improver": "./index.js"
+    "vimprove": "./dist/vimprove.js"
   },
   "scripts": {
-    "start": "node index.js"
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit"
   },
-  "keywords": ["vim", "neovim", "productivity"],
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": ["vim", "neovim", "productivity", "cli"],
   "license": "MIT"
 }
