@@ -2,32 +2,50 @@
 // vim-improver: VSCode Extension
 //
 // Logs Vim usage patterns from the vscodevim extension to ~/.vim-improver/vscode.log
-// for analysis by the vim-improver CLI.
+// for analysis by the vimprove CLI.
 //
 // What is captured:
 //   - File saves (frequency indicates workflow patterns)
 //   - Cursor position deltas (large jumps suggest missed motions)
-//   - Mode changes (normal/insert/visual transitions via vscodevim)
-//   - Undo/redo commands
-//   - Search usage
-//   - Text change sizes (small single-char edits in normal-ish patterns)
+//   - Single-character text deletions (inferred 'x' in normal mode)
+//   - Undo / redo operations (via TextDocumentChangeReason API)
+//   - Range deletes (inferred d-motions)
+//
+// What is NOT captured:
+//   - The content of any text you type
+//   - Individual keystrokes (VSCode's type command is monopolised by vscodevim)
 
 const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const LOG_DIR = path.join(os.homedir(), '.vim-improver');
-const LOG_FILE = path.join(LOG_DIR, 'vscode.log');
+// ── Config ────────────────────────────────────────────────────────────────────
+
+function getLogDir() {
+  const config = vscode.workspace.getConfiguration('vim-improver');
+  const override = config.get('logDir');
+  return (override && override.trim()) ? override.trim() : path.join(os.homedir(), '.vim-improver');
+}
+
+function isEnabled() {
+  return vscode.workspace.getConfiguration('vim-improver').get('enabled', true);
+}
+
+// ── Logging ───────────────────────────────────────────────────────────────────
 
 let writeBuffer = [];
 const FLUSH_SIZE = 20;
 let flushTimer = null;
+let sessionKeyCount = 0;
+
+function getLogFile() {
+  return path.join(getLogDir(), 'vscode.log');
+}
 
 function ensureLogDir() {
-  if (!fs.existsSync(LOG_DIR)) {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-  }
+  const dir = getLogDir();
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
 function flush() {
@@ -35,11 +53,13 @@ function flush() {
   const lines = writeBuffer.join('\n') + '\n';
   writeBuffer = [];
   try {
-    fs.appendFileSync(LOG_FILE, lines);
+    ensureLogDir();
+    fs.appendFileSync(getLogFile(), lines);
   } catch (_) {}
 }
 
 function log(key, mode) {
+  if (!isEnabled()) return;
   const entry = JSON.stringify({
     t: Math.floor(Date.now() / 1000),
     k: key,
@@ -47,51 +67,153 @@ function log(key, mode) {
     s: 'vscode',
   });
   writeBuffer.push(entry);
+  sessionKeyCount++;
   if (writeBuffer.length >= FLUSH_SIZE) flush();
 }
 
-// Track state for delta-based logging
-let lastCursorLine = -1;
-let lastCursorChar = -1;
-let lastSaveTime = 0;
-let currentMode = 'n'; // assume normal to start
+// ── Mode tracking ─────────────────────────────────────────────────────────────
+//
+// VSCode's type command is monopolised by vscodevim so we cannot intercept
+// raw keystrokes. We track mode via vscodevim's exported API, polling on each
+// cursor / document event.  Falls back to 'n' (normal) when unknown.
 
-function getVimMode(vimExt) {
+let currentMode = 'n';
+
+function refreshMode(vimExt) {
+  if (!vimExt) return;
   try {
-    // vscodevim exposes mode through its exports
-    const api = vimExt && vimExt.exports;
-    if (api && typeof api.mode === 'string') return api.mode;
+    const api = vimExt.exports;
+    if (!api) return;
+
+    // vscodevim exports a `mode` object with a `current` field (string enum)
+    // e.g. "Normal", "Insert", "Visual", "VisualBlock", "VisualLine", "Replace"
+    const raw =
+      (typeof api.mode === 'string' ? api.mode :
+       api.mode && typeof api.mode.current === 'string' ? api.mode.current :
+       null);
+
+    if (!raw) return;
+    const lower = raw.toLowerCase();
+    if (lower.includes('insert') || lower.includes('replace')) currentMode = 'i';
+    else if (lower.includes('visual'))  currentMode = 'v';
+    else if (lower.includes('command')) currentMode = 'c';
+    else                                currentMode = 'n';
   } catch (_) {}
-  return null;
 }
+
+// ── Status bar ────────────────────────────────────────────────────────────────
+
+let statusBar = null;
+
+function updateStatusBar() {
+  if (!statusBar) return;
+  if (!isEnabled()) {
+    statusBar.text = '$(circle-slash) Vim Improver: paused';
+    statusBar.tooltip = 'Vim Improver logging is disabled. Click to open settings.';
+    statusBar.command = 'workbench.action.openSettings';
+    return;
+  }
+  statusBar.text = `$(keyboard) Vim Improver: ${sessionKeyCount.toLocaleString()} logged`;
+  statusBar.tooltip = `Vim Improver is active.\nSession keystrokes: ${sessionKeyCount.toLocaleString()}\nLog: ${getLogFile()}\nClick to open log directory.`;
+  statusBar.command = 'vim-improver.openLogDir';
+}
+
+// ── Extension lifecycle ───────────────────────────────────────────────────────
 
 function activate(context) {
   ensureLogDir();
 
-  // Flush every 3 seconds
-  flushTimer = setInterval(flush, 3000);
+  // Status bar
+  statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 50);
+  updateStatusBar();
+  statusBar.show();
+  context.subscriptions.push(statusBar);
+
+  // Flush timer (every 3s)
+  flushTimer = setInterval(() => { flush(); updateStatusBar(); }, 3000);
 
   const vimExt = vscode.extensions.getExtension('vscodevim.vim');
 
-  // ── Save events ──────────────────────────────────────────────────────────
-  // Frequent saves are fine but very rapid saves (< 2s) suggest nervousness
-  // or not trusting auto-save.
+  // ── Commands ────────────────────────────────────────────────────────────────
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('vim-improver.openLogDir', () => {
+      const dir = getLogDir();
+      vscode.env.openExternal(vscode.Uri.file(dir));
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('vim-improver.showStatus', () => {
+      const logFile = getLogFile();
+      const exists = fs.existsSync(logFile);
+      const size = exists ? Math.round(fs.statSync(logFile).size / 1024) : 0;
+      vscode.window.showInformationMessage(
+        `Vim Improver — session: ${sessionKeyCount.toLocaleString()} keystrokes logged | ` +
+        `log file: ${exists ? `${size} KB` : 'not yet created'}`
+      );
+    })
+  );
+
+  // ── Save events ─────────────────────────────────────────────────────────────
+  // Frequent saves reveal workflow patterns. Very rapid saves (< 2s) suggest
+  // the user doesn't trust auto-save or is nervously writing :w.
+
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument(() => {
-      const now = Math.floor(Date.now() / 1000);
-      const delta = now - lastSaveTime;
-      lastSaveTime = now;
-      // delta < 0 means first save; record the gap so the analyzer can spot patterns
       log(':w', 'c');
     })
   );
 
-  // ── Cursor movement ───────────────────────────────────────────────────────
-  // We can't see individual keystrokes, but we CAN see where the cursor ends up.
-  // A large line delta in a short time suggests the user typed many j/k instead
-  // of using efficient motions.
+  // ── Undo / redo ─────────────────────────────────────────────────────────────
+  // TextDocumentChangeReason (added in VSCode 1.83) lets us detect undo/redo
+  // reliably without intercepting commands.
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeTextDocument((event) => {
+      refreshMode(vimExt);
+
+      const reason = event.reason;
+      if (reason === vscode.TextDocumentChangeReason.Undo) {
+        log('u', 'n');
+        return;
+      }
+      if (reason === vscode.TextDocumentChangeReason.Redo) {
+        log('<C-r>', 'n');
+        return;
+      }
+
+      // Normal edits — infer vim operations from the shape of the change
+      for (const change of event.contentChanges) {
+        const deleted = change.rangeLength;
+        const inserted = change.text.length;
+
+        if (deleted === 1 && inserted === 0) {
+          // Single char delete with no insert — likely 'x' or 'X' in normal mode
+          log('x', 'n');
+        } else if (deleted > 1 && inserted === 0) {
+          // Range delete — likely a d-motion (dw, dd, d$, …)
+          log(`<del:${deleted}>`, 'n');
+        } else if (inserted > 0 && deleted === 0) {
+          // Insertion — log that insert-mode activity happened without logging content
+          log('<ins>', 'i');
+        }
+      }
+    })
+  );
+
+  // ── Cursor movement ─────────────────────────────────────────────────────────
+  // We infer vim motions from cursor position deltas. A run of small line moves
+  // suggests j/j/j instead of a count (5j) or efficient motion ({, }, Ctrl-d).
+  // Large jumps suggest a real motion or search was used — that's good.
+
+  let lastCursorLine = -1;
+  let lastCursorChar = -1;
+
   context.subscriptions.push(
     vscode.window.onDidChangeTextEditorSelection((event) => {
+      refreshMode(vimExt);
+
       const sel = event.selections[0];
       if (!sel) return;
 
@@ -99,26 +221,24 @@ function activate(context) {
       const char = sel.active.character;
 
       if (lastCursorLine >= 0) {
-        const lineDelta = Math.abs(line - lastCursorLine);
-        const charDelta = Math.abs(char - lastCursorChar);
+        const lineDelta = line - lastCursorLine;   // signed: +ve = down
+        const charDelta = char - lastCursorChar;   // signed: +ve = right
+        const absLine   = Math.abs(lineDelta);
+        const absChar   = Math.abs(charDelta);
 
-        // Log significant cursor jumps for analysis
-        // Small moves (1-3 lines) logged as individual steps to detect hjkl spam
-        if (lineDelta > 0 && lineDelta <= 5) {
-          const dir = line > lastCursorLine ? 'j' : 'k';
-          for (let i = 0; i < lineDelta; i++) {
-            log(dir, 'n');
-          }
-        } else if (lineDelta > 5) {
-          // Large jump — likely used a real motion (good) or search
-          log(`<jump:${lineDelta}>`, 'n');
+        if (absLine > 0 && absLine <= 5) {
+          // Small vertical move — emit individual j/k so run detector fires
+          const dir = lineDelta > 0 ? 'j' : 'k';
+          for (let i = 0; i < absLine; i++) log(dir, 'n');
+        } else if (absLine > 5) {
+          // Large jump — likely a real motion (good) — just note it
+          log(`<jump:${absLine}>`, 'n');
         }
 
-        if (lineDelta === 0 && charDelta > 0 && charDelta <= 5) {
-          const dir = char > lastCursorChar ? 'l' : 'h';
-          for (let i = 0; i < charDelta; i++) {
-            log(dir, 'n');
-          }
+        if (absLine === 0 && absChar > 0 && absChar <= 5) {
+          // Small horizontal move on same line — emit individual h/l
+          const dir = charDelta > 0 ? 'l' : 'h';
+          for (let i = 0; i < absChar; i++) log(dir, 'n');
         }
       }
 
@@ -127,52 +247,15 @@ function activate(context) {
     })
   );
 
-  // ── Document changes ──────────────────────────────────────────────────────
-  // Single-character deletions in rapid succession suggest using x repeatedly
-  // rather than d{n}.
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeTextDocument((event) => {
-      for (const change of event.contentChanges) {
-        const deleted = change.rangeLength;
-        const inserted = change.text.length;
-
-        // Single char delete with no insert → likely 'x' or 'X'
-        if (deleted === 1 && inserted === 0) {
-          log('x', 'n');
-        }
-        // Single char insert → insert mode activity (log ctrl-key equivalent)
-        else if (inserted === 1 && deleted === 0) {
-          // don't log content, just that an insert happened
-          log('<ins>', 'i');
-        }
-        // Range delete → likely a d-motion
-        else if (deleted > 1 && inserted === 0) {
-          log(`<del:${deleted}>`, 'n');
-        }
-      }
-    })
-  );
-
-  // ── Built-in VSCode commands we can intercept ─────────────────────────────
-  // Undo/redo frequency
-  const origUndo = vscode.commands.registerCommand('vim-improver._undo', () => {
-    log('u', 'n');
-    vscode.commands.executeCommand('undo');
-  });
-  const origRedo = vscode.commands.registerCommand('vim-improver._redo', () => {
-    log('<C-r>', 'n');
-    vscode.commands.executeCommand('redo');
-  });
-
-  context.subscriptions.push(origUndo, origRedo);
-
-  // Log that the extension activated
+  // Log session start marker
   log('<session-start>', 'n');
+  updateStatusBar();
 }
 
 function deactivate() {
   if (flushTimer) clearInterval(flushTimer);
   flush();
+  if (statusBar) statusBar.dispose();
 }
 
 module.exports = { activate, deactivate };

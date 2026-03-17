@@ -1,22 +1,43 @@
 {
   "name": "vim-improver",
   "displayName": "Vim Improver",
-  "description": "Logs Vim usage patterns for analysis by the vim-improver CLI",
+  "description": "Logs Vim usage patterns from the vscodevim extension to ~/.vim-improver/vscode.log for analysis by the vimprove CLI.",
   "version": "0.1.0",
-  "publisher": "local",
+  "publisher": "DanCRichards",
+  "license": "MIT",
   "engines": {
-    "vscode": "^1.75.0"
+    "vscode": "^1.83.0"
   },
   "categories": ["Other"],
+  "keywords": ["vim", "neovim", "vscodevim", "productivity", "keystroke"],
   "activationEvents": ["onStartupFinished"],
   "main": "./extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "vim-improver.logKey",
-        "title": "Vim Improver: Log Key"
+        "command": "vim-improver.openLogDir",
+        "title": "Vim Improver: Open Log Directory"
+      },
+      {
+        "command": "vim-improver.showStatus",
+        "title": "Vim Improver: Show Session Status"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Vim Improver",
+      "properties": {
+        "vim-improver.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable keystroke logging."
+        },
+        "vim-improver.logDir": {
+          "type": "string",
+          "default": "",
+          "description": "Override the log directory. Defaults to ~/.vim-improver."
+        }
+      }
+    }
   },
   "extensionDependencies": []
 }
