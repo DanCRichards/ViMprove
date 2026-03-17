@@ -1,62 +1,97 @@
 # ViMprove
 
-**Capture your Vim keystrokes. Find the inefficiencies. Level up.**
+> *Stop counting lines. Stop reaching for arrow keys. Stop doing with ten keystrokes what Vim can do in two.*
 
-ViMprove watches how you use Vim across NeoVim and VSCode, detects patterns that suggest you could be moving faster, and gives you concrete, actionable tips based on your actual usage.
+ViMprove silently watches how you use Vim — across NeoVim, VSCode, and plain terminal Vim — detects the inefficiency patterns you repeat most, and gives you targeted, actionable advice based on your **actual** behaviour.
 
 ```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                         Vim Improver — Tips  [last 7d]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                      Vim Improver — Tips  [source: nvim · last 7d]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Found 3 area(s) to improve, sorted by impact:
+  Found 4 area(s) to improve, sorted by impact:
 
-   1. Repeated j/k  HIGH  (seen 142×)  category: Navigation
+   1. Holding j to move down many lines  HIGH  (seen 28×)  category: Navigation
+      id: repeated_j
 
-     You pressed j or k 3 or more times in a row frequently.
-     Repeated j/k is a sign you're counting lines manually.
+     Tapping j many times to reach a line wastes keystrokes. Vim has faster
+     vertical motions for every distance — pick the right one for how far you need to go.
 
-     Instead of:  j j j j j j j j j j
+     Instead of:  jjjjjjjj  (8 taps to move 8 lines)
      Try:
-       10j                        — jump 10 lines with a count
-       }  / {                     — jump to next / previous blank line
-       <C-d>  / <C-u>             — scroll half a page down / up
-       /pattern  then n / N       — search and jump to what you're looking for
+       8j             — count + j: move exactly 8 lines
+       }  /  {        — next / previous blank-line paragraph
+       <C-d>          — half-page down
+       /word<CR>      — search and jump directly to content
+       *              — jump to next occurrence of word under cursor
 
-   2. Use ZZ instead of :wq  MED  (seen 23×)  category: Workflow
-
-     :wq takes 4 keystrokes. ZZ does the same in 2.
-
-     Instead of:  :wq<CR>
-     Try:
-       ZZ   — write and quit (2 keystrokes, no colon needed)
+     Dismiss this tip:  vimprove dismiss repeated_j
 
   ──────────────────────────────────────────────────────────────────────────────
+
+   2. Never using macros (q / @)  HIGH  (seen 12×)  category: Workflow
+      id: not_using_macros
+
+     Macros record any sequence of keystrokes and replay them with a single
+     command. One macro can replace thousands of manual edits.
+
+     Instead of:  Manually repeating the same multi-step edit on every line
+     Try:
+       qa         — start recording into register a
+       ...        — perform your edit sequence
+       q          — stop recording
+       @a         — replay   @@  — replay last   50@a  — replay 50 times
 ```
+
+---
+
+## How it works
+
+```
+  NeoVim plugin ─────────────────────────────────────────────┐
+  (vim.on_key — every keystroke, exact mode)                 │
+                                                             ▼
+  VSCode extension ──────────────────────────────►  ~/.vim-improver/
+  (editor event inference — saves, cursors, undo)   (JSONL log files)
+                                                             │
+  vim -w alias ──────────────────────────────────────────────┘
+  (scriptout binary → vimprove import)
+
+                                    ▼
+
+                          vimprove report
+                    (reads logs, detects patterns,
+                     surfaces personalised tips)
+```
+
+Nothing leaves your machine. All data lives in `~/.vim-improver/`.
 
 ---
 
 ## Features
 
-- **NeoVim plugin** — captures every keystroke via `vim.on_key()`, with privacy filtering in insert mode
-- **VSCode extension** — infers Vim operations from editor events (saves, cursor moves, undo/redo, deletions)
-- **Scriptout support** — import any session recorded with `vim -w session.sout`
-- **Rich CLI** — filterable by source and time window, colour-coded output
-- **13 tips** across navigation, editing, text objects, workflow, and repeat patterns
-- **Zero runtime dependencies** — Node.js stdlib only
+- **22 tips** across Navigation, Editing, Text Objects, Workflow, and Repeat
+- **NeoVim plugin** — captures every keystroke with exact mode via `vim.on_key()`
+- **VSCode extension** — infers Vim operations from editor events alongside vscodevim
+- **Plain Vim alias** — `vim -w` scriptout recording, importable at any time
+- **Progress tracking** — compare this week vs last week to see if you're improving
+- **Session summary** — instant recap of your last Vim session
+- **Tip dismissal** — suppress tips you've already absorbed
+- **Source + time filters** — slice data by `--source nvim` or `--since 7d`
+- **Zero runtime dependencies** — Node.js stdlib only, single bundled file
 
 ---
 
 ## Install
 
-### Homebrew (recommended)
+### Homebrew
 
 ```bash
 brew tap DanCRichards/vimprove https://github.com/DanCRichards/ViMprove
 brew install vimprove
 ```
 
-Then follow the post-install instructions to set up the NeoVim plugin and/or VSCode extension.
+Follow the post-install caveats to wire up the NeoVim plugin and/or VSCode extension.
 
 ### One-shot script
 
@@ -66,19 +101,13 @@ cd ViMprove
 ./install.sh
 ```
 
-The installer:
-- Builds the CLI and symlinks it into `~/.local/bin/vimprove`
-- Copies the NeoVim plugin to `~/.config/nvim/lua/` and adds `require('vim_improver').setup()` to your `init.lua`
-- Installs the VSCode extension via the VSCode CLI (if VSCode is found)
+The script builds the CLI, symlinks it onto your PATH, copies the NeoVim plugin into `~/.config/nvim/lua/`, appends `require('vim_improver').setup()` to your `init.lua`, and installs the VSCode extension if VSCode is found.
 
 ### Manual
 
 ```bash
 git clone https://github.com/DanCRichards/ViMprove.git
-cd ViMprove/cli
-npm install && npm run build
-
-# Symlink or add to PATH:
+cd ViMprove/cli && npm install && npm run build
 ln -sf "$PWD/dist/vimprove.js" ~/.local/bin/vimprove
 ```
 
@@ -86,131 +115,162 @@ ln -sf "$PWD/dist/vimprove.js" ~/.local/bin/vimprove
 
 ## Data sources
 
-### NeoVim plugin
+### NeoVim  *(most accurate)*
 
-The most accurate source. Uses `vim.on_key()` to capture every keystroke with its mode.
-
-**Setup:**
+Uses `vim.on_key()` to capture every keystroke with its exact Vim mode. Insert-mode printable characters are never logged — only control keys and normal-mode keystrokes.
 
 ```bash
-# Copy the plugin
+# Copy plugin
 cp neovim/vim_improver.lua ~/.config/nvim/lua/
 
 # Add to init.lua
 echo "require('vim_improver').setup()" >> ~/.config/nvim/init.lua
 ```
 
-Data is written to `~/.vim-improver/neovim.log`.
+Logs to `~/.vim-improver/neovim.log`.
 
-### VSCode extension
+### VSCode  *(good coverage)*
 
-Works alongside the [vscodevim](https://marketplace.visualstudio.com/items?itemName=vscodevim.vim) extension. Because VSCode's `type` event is monopolised by vscodevim, the extension infers Vim operations from editor events (cursor deltas, document changes, undo/redo). This is less precise than the NeoVim plugin but still catches the most common inefficiency patterns.
-
-**Setup:**
+Works alongside the [vscodevim](https://marketplace.visualstudio.com/items?itemName=vscodevim.vim) extension. Because VSCode's `type` event is monopolised by vscodevim, the extension infers Vim operations from editor events: cursor deltas, document changes, undo/redo. A status bar item `⌨ Vim Improver` confirms it's active.
 
 ```bash
-# Build and install the extension
 cd vscode
 npx @vscode/vsce package --allow-missing-repository --no-dependencies
 code --install-extension vim-improver-0.1.0.vsix
+# Restart VSCode
 ```
 
-Then restart VSCode. A status bar item (⌨ Vim Improver) confirms the extension is active.
+Logs to `~/.vim-improver/vscode.log`.
 
-Data is written to `~/.vim-improver/vscode.log`.
+### Plain Vim with `-w`  *(any terminal session)*
 
-### Plain Vim with `-w` scriptout
-
-Works with any terminal Vim session. Add this alias to your shell rc:
+Add to your shell rc to capture every session automatically:
 
 ```bash
 alias vim='vim -w ~/.vim-improver/$(date +%s).sout'
 ```
 
-Then import the recorded file:
+Import whenever you like:
 
 ```bash
-vimprove import ~/.vim-improver/1234567890.sout
+vimprove import ~/.vim-improver/*.sout
 ```
 
-Or record a one-off session manually:
-
-```bash
-nvim -w ~/session.sout myfile.txt
-vimprove import ~/session.sout
-```
-
-Data is written to `~/.vim-improver/imported.log`.
+Logs to `~/.vim-improver/imported.log`.
 
 ---
 
 ## CLI reference
 
 ```
-vimprove [command] [--source <src>] [--since <period>]
+vimprove [command] [--source <src>] [--since <period>] [--all]
 ```
 
 | Command | Description |
 |---|---|
-| `report` | Full stats + tips (default) |
+| `report` | Full stats + tips *(default)* |
 | `stats` | Keystroke breakdown by source, mode, and key |
 | `tips` | Personalised improvement tips |
-| `sources` | Show what data is available per source |
-| `import <file>` | Import a Vim `-w` scriptout file |
-| `clear` | Delete all collected log data |
+| `sources` | Per-source data summary |
+| `progress` | Compare tip scores across two consecutive periods |
+| `session` | Summary of your most recent Vim session |
+| `import <file>` | Import a `vim -w` scriptout file |
+| `dismiss <tip-id>` | Suppress a tip you've already absorbed |
+| `undismiss [id]` | Re-enable a tip, or list all dismissed tips |
+| `clear` | Delete all log data |
 | `help` | Show usage |
 
-**Filters** — work with `stats`, `tips`, and `report`:
+**Filters** — apply to `stats`, `tips`, `report`, `progress`:
 
 | Flag | Values | Default |
 |---|---|---|
-| `--source` / `-s` | `nvim`, `vscode`, `scriptout`, `all` | `all` |
-| `--since` | `1h`, `24h`, `7d`, `30d`, `all` | `all` |
+| `--source` / `-s` | `nvim` `vscode` `scriptout` `all` | `all` |
+| `--since` | `1h` `24h` `7d` `30d` `all` | `all` |
+| `--all` | *(flag)* | Show dismissed tips too |
 
 **Examples:**
 
 ```bash
-vimprove report
-vimprove report --source nvim
-vimprove tips   --source vscode --since 7d
-vimprove stats  --since 24h
-vimprove sources
+vimprove                              # full report, all sources
+vimprove report --source nvim         # NeoVim data only
+vimprove tips   --since 7d            # tips from last week
+vimprove progress                     # this 7d vs prior 7d
+vimprove progress --since 30d         # this 30d vs prior 30d
+vimprove session                      # last session recap
+vimprove dismiss wq_vs_ZZ            # hide a tip you've learned
+vimprove tips --all                   # show dismissed tips too
 ```
 
 ---
 
-## Tips detected
+## Tips
 
-| Category | Tip |
-|---|---|
-| Navigation | Repeated `j`/`k` → use counts, `{`/`}`, `<C-d>`/`<C-u>`, search |
-| Navigation | Repeated `h`/`l` → use `w`/`b`/`e`/`f`/`t`/`$`/`0` |
-| Navigation | Arrow keys → `hjkl` |
-| Editing | Repeated `x` → `d{n}`, `dw`, `diw` |
-| Editing | `d$` → `D`, `c$` → `C` |
-| Editing | `i<Esc>` → `r` or `s` |
-| Editing | Excessive `u` presses → use count, `:earlier` |
-| Workflow | `u`/`<C-r>` oscillation → use marks (`ma`, `'a`) |
-| Workflow | Rapid `:w` saves → enable `autowrite` |
-| Workflow | `:wq` → `ZZ` |
-| Text Objects | `^dw` pattern → `diw`, `daw`, `ciw` |
-| Repeat | Same 2-key sequence back-to-back → `.` repeat |
+22 tips across 5 categories. Each fires only when there's enough data to be confident the pattern is real.
+
+### Navigation
+
+| ID | Trigger | Fix |
+|---|---|---|
+| `repeated_j` | Run of `j` 3+ times | Count + j, `}`, `<C-d>`, `/pattern`, `*` |
+| `repeated_k` | Run of `k` 3+ times | Count + k, `{`, `<C-u>`, `?pattern`, `#` |
+| `repeated_h` | Run of `h` 4+ times | `b`, `B`, `F`, `0`, `^` |
+| `repeated_l` | Run of `l` 4+ times | `w`, `e`, `f`, `$`, `g_` |
+| `arrow_keys` | 10+ arrow key presses | `hjkl` |
+| `not_using_star_hash` | `*`/`#` absent, 300+ keystrokes | `*` next occurrence, `#` previous |
+| `not_using_jump_list` | `<C-o>` absent, 300+ keystrokes | `<C-o>` back, `<C-i>` forward |
+| `not_using_percent` | `%` absent, 300+ keystrokes | `%` jump to matching bracket |
+
+### Editing
+
+| ID | Trigger | Fix |
+|---|---|---|
+| `repeated_x` | Run of `x` 3+ times | `dw`, `diw`, `D`, `dt<char>` |
+| `d_dollar` | `d$` sequence | `D` |
+| `c_dollar` | `c$` sequence | `C` |
+| `i_esc_immediately` | `i<Esc>` sequence | `r`, `s` |
+| `excessive_undo` | Run of `u` 5+ times | `5u`, `:earlier 5m` |
+| `undo_redo_oscillation` | Alternating `u`/`<C-r>` | Marks — `ma`, `` `a `` |
+| `end_of_line_insert` | `$a`, `$i`, `0i` sequences | `A`, `I`, `o`, `O` |
+| `indentation_spam` | Repeated `>` or `<` | `3>`, `==`, `=ip`, `gg=G` |
+| `cgn_workflow` | Repeated `n` + `c` | `cgn` + `.` repeat |
+| `moving_lines` | `dd` + move + `p` | `:m+1`, `:m-2` |
+
+### Workflow
+
+| ID | Trigger | Fix |
+|---|---|---|
+| `frequent_save` | `:w` twice within 2s, 5+ times | `autowrite`, `ZZ` |
+| `wq_vs_ZZ` | `:wq` 5+ times | `ZZ` |
+| `not_using_macros` | `q` absent, 1000+ keystrokes | `qa…q` record, `@a` play, `@@` repeat |
+| `missing_splits` | Many `:e`, no `<C-w>` | `<C-w>v`, `<C-w>s`, `:vsp file` |
+
+### Text Objects
+
+| ID | Trigger | Fix |
+|---|---|---|
+| `missing_text_objects` | `^dw` / `0dw` pattern | `diw`, `daw`, `ci"`, `ci{`, `dit` |
+
+### Repeat
+
+| ID | Trigger | Fix |
+|---|---|---|
+| `not_using_dot` | Same 2-key sequence back-to-back | `.` repeat, `cgn` + `.` |
 
 ---
 
 ## Privacy
 
-- **NeoVim**: Characters typed in insert/replace mode are **never logged**. Only control keys (Esc, Backspace, arrows) and normal-mode keystrokes are recorded.
-- **VSCode**: Text content is never logged. Only operation shapes (single-char delete, range delete, insert happened) are recorded.
-- **Scriptout**: Insert-mode printable characters are filtered out during import.
+- **NeoVim**: printable characters typed in insert/replace mode are **never recorded**. Only control keys (Esc, Backspace, arrows, etc.) and normal-mode keystrokes are logged.
+- **VSCode**: text content is never logged. Only the *shape* of changes (single-char delete, range delete, undo) is recorded.
+- **Scriptout**: insert-mode printable characters are stripped during import.
 
-All data stays local in `~/.vim-improver/`. Nothing is sent anywhere.
+All data is stored locally in `~/.vim-improver/`. Nothing is sent anywhere.
 
 ---
 
 ## Log format
 
-Each source writes [JSONL](https://jsonlines.org/) — one JSON object per line:
+[JSONL](https://jsonlines.org/) — one JSON object per line:
 
 ```json
 {"t":1700000000,"k":"j","m":"n","s":"nvim"}
@@ -219,9 +279,9 @@ Each source writes [JSONL](https://jsonlines.org/) — one JSON object per line:
 | Field | Type | Description |
 |---|---|---|
 | `t` | integer | Unix timestamp (seconds) |
-| `k` | string | Key name (`j`, `<Esc>`, `:wq`, …) |
-| `m` | string | Vim mode (`n`, `i`, `v`, `c`) |
-| `s` | string | Source (`nvim`, `vscode`, `scriptout`) |
+| `k` | string | Key name — `j`, `<Esc>`, `<C-d>`, `:wq`, … |
+| `m` | string | Vim mode — `n` normal · `i` insert · `v` visual · `c` command |
+| `s` | string | Source — `nvim` · `vscode` · `scriptout` |
 
 ---
 
@@ -230,25 +290,31 @@ Each source writes [JSONL](https://jsonlines.org/) — one JSON object per line:
 ```bash
 cd cli
 npm install
-npm run typecheck   # type-check without building
-npm run build       # produces dist/vimprove.js
+npm run typecheck        # type-check without emitting
+npm run build            # bundles to dist/vimprove.js
 node dist/vimprove.js help
 ```
 
-The CLI is TypeScript bundled with [esbuild](https://esbuild.github.io/) into a single file with no runtime dependencies.
+The CLI is TypeScript bundled by [esbuild](https://esbuild.github.io/) into a single executable with no runtime dependencies.
 
-See [`docs/`](docs/) for architecture notes, the log format spec, research on IDE Vim plugin APIs, and a guide to adding new tips.
+See [`docs/`](docs/) for:
+- [`architecture.md`](docs/architecture.md) — system design and data flow
+- [`data-sources.md`](docs/data-sources.md) — NeoVim, VSCode, and scriptout in depth
+- [`log-format.md`](docs/log-format.md) — full JSONL schema reference
+- [`ide-research.md`](docs/ide-research.md) — why vscodevim and IdeaVim can't forward raw keystrokes
+- [`adding-tips.md`](docs/adding-tips.md) — guide to contributing new tip detectors
 
 ---
 
 ## Contributing
 
 1. Fork the repo
-2. Add or improve a tip in `cli/src/tips.ts` — see [`docs/adding-tips.md`](docs/adding-tips.md)
-3. Run `npm run typecheck && npm run build` to verify
-4. Open a PR
+2. Add a tip in `cli/src/tips.ts` — see [`docs/adding-tips.md`](docs/adding-tips.md) for the full guide
+3. Add any required detector in `cli/src/analyzer.ts` and field in `cli/src/types.ts`
+4. Run `npm run typecheck && npm run build` to verify
+5. Open a PR
 
-Bug reports and feature requests welcome via [GitHub Issues](https://github.com/DanCRichards/ViMprove/issues).
+Bug reports and feature requests: [GitHub Issues](https://github.com/DanCRichards/ViMprove/issues).
 
 ---
 
