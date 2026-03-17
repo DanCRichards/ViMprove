@@ -4,44 +4,7 @@
 
 ViMprove silently watches how you use Vim — across NeoVim, VSCode, and plain terminal Vim — detects the inefficiency patterns you repeat most, and gives you targeted, actionable advice based on your **actual** behaviour.
 
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                      Vim Improver — Tips  [source: nvim · last 7d]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Found 4 area(s) to improve, sorted by impact:
-
-   1. Holding j to move down many lines  HIGH  (seen 28×)  category: Navigation
-      id: repeated_j
-
-     Tapping j many times to reach a line wastes keystrokes. Vim has faster
-     vertical motions for every distance — pick the right one for how far you need to go.
-
-     Instead of:  jjjjjjjj  (8 taps to move 8 lines)
-     Try:
-       8j             — count + j: move exactly 8 lines
-       }  /  {        — next / previous blank-line paragraph
-       <C-d>          — half-page down
-       /word<CR>      — search and jump directly to content
-       *              — jump to next occurrence of word under cursor
-
-     Dismiss this tip:  vimprove dismiss repeated_j
-
-  ──────────────────────────────────────────────────────────────────────────────
-
-   2. Never using macros (q / @)  HIGH  (seen 12×)  category: Workflow
-      id: not_using_macros
-
-     Macros record any sequence of keystrokes and replay them with a single
-     command. One macro can replace thousands of manual edits.
-
-     Instead of:  Manually repeating the same multi-step edit on every line
-     Try:
-       qa         — start recording into register a
-       ...        — perform your edit sequence
-       q          — stop recording
-       @a         — replay   @@  — replay last   50@a  — replay 50 times
-```
+![ViMprove demo](demo/demo.gif)
 
 ---
 
