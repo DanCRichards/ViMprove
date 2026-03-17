@@ -9,7 +9,7 @@ import type { Stats, ParsedArgs } from './types.js';
 
 // ── Colours ───────────────────────────────────────────────────────────────────
 
-const isTTY = process.stdout.isTTY;
+const isTTY = process.stdout.isTTY || process.env.FORCE_COLOR === '1';
 const c = isTTY
   ? {
       reset: '\x1b[0m',  bold: '\x1b[1m',    dim: '\x1b[2m',

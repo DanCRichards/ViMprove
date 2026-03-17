@@ -2,12 +2,12 @@ Output demo/demo.gif
 
 Set Shell "zsh"
 Set FontSize 13
-Set Width 920
-Set Height 580
+Set Width 860
+Set Height 520
 Set Theme "TokyoNight"
 Set Padding 20
 Set TypingSpeed 40ms
-Set Framerate 24
+Set Framerate 16
 Set CursorBlink false
 
 # Start clean
@@ -23,19 +23,20 @@ Sleep 200ms
 Enter
 Sleep 3500ms
 
-# ── tips ───────────────────────────────────────────────────────────────────────
-Type "vimprove tips --since 7d"
+# ── tips — piped through less so we can scroll ────────────────────────────────
+Type "FORCE_COLOR=1 vimprove tips --since 7d | less -R"
 Sleep 200ms
 Enter
-Sleep 2000ms
+Sleep 2500ms
 
-# let the first tip sit
-Sleep 3000ms
+# slowly scroll down through the tips output
+Down@250ms 38
 
-# scroll to second tip
-Down@500ms 18
+Sleep 1500ms
 
-Sleep 3000ms
+# exit less
+Type "q"
+Sleep 1000ms
 
 # ── progress ───────────────────────────────────────────────────────────────────
 Type "vimprove progress"
